@@ -1,12 +1,97 @@
-# Swizz Project — Kubernetes Deployment Guide
+# Swizz Project - Deployment Guide for Users API + OPA Authorization Service + OPA + Postgres (Kubernetes / Minikube)
+
+## Overview
+
+This setup demonstrates a **modular Kubernetes-based microservice architecture** running locally on **Minikube**.  
+It combines **authentication**, **authorization**, and **data persistence** through four coordinated services.
+
+---
+
+## Services Breakdown
+
+### 1. **users-service**
+**Tech Stack:** FastAPI · SQLAlchemy · JWT  
+
+Handles user management and exposes secure REST endpoints.
+
+**Endpoints:**
+| Method | Path | Access |
+|---------|------|---------|
+| `GET` | `/api/users` | Authenticated users |
+| `POST` | `/api/users` | Admins only |
+
+**Responsibilities:**
+- User CRUD operations  
+- JWT-based authentication and token validation  
+- Communicates with PostgreSQL for persistence  
+- Delegates authorization decisions to `opa-service`
+
+---
+
+### 2. **opa-service**
+**Tech Stack:** FastAPI  
+
+A lightweight **authorization wrapper** responsible for sending policy evaluation requests to the OPA engine.
+
+**Responsibilities:**
+- Forwards authorization queries to `opa`
+- Exposes `/api/internal/evaluate` for internal services
+- Central point of communication between business services and OPA
+
+---
+
+### 3. **opa (Open Policy Agent)**
+**Tech Stack:** OPA Rego Policy Engine  
+
+The **policy brain** of the system - enforces fine-grained access control based on Rego rules.
+
+**Responsibilities:**
+- Loads and executes policies from `policy.rego` in the application map
+- Evaluates authorization for all incoming requests
+- Returns `allow` or `deny` decisions to `opa-service`
+
+---
+
+### 4. **postgres**
+**Tech Stack:** PostgreSQL 16  
+
+Provides **persistent data storage** for the `users-service`.
+
+**Features:**
+- Stores user records and metadata
+- Mounted with a **PersistentVolumeClaim (PVC)** for data durability  
+- Connected via service discovery (`postgres:5432`)
+
+---
+
+## Deployment Context
+
+All services are deployed in **Kubernetes** under a shared namespace (e.g. `swizz`).
+
+| Service | Type | Image / Technology | Exposed Port |
+|----------|------|--------------------|---------------|
+| users-service | Deployment | FastAPI | `8000` |
+| opa-service | Deployment | FastAPI | `8001` |
+| opa | Deployment | OpenPolicyAgent/opa:latest | `8181` |
+| postgres | Deployment | postgres:16-alpine | `5432` |
+
+**Local Cluster Management:**
+- Managed using **Minikube**
+- Each service deployed via its own `deployment` yaml file
+- Inter-service communication happens through Kubernetes `Services`
+
+
+## Architecture
+<img width="3820" height="1554" alt="image" src="https://github.com/user-attachments/assets/271fe663-37b1-43ff-9861-fd512a54e584" />
+
 
 ## Prerequisites
 
 You’ll need the following tools installed:
 
-- **Minikube** — [Install Guide](https://minikube.sigs.k8s.io/docs/start/?arch=%2Fwindows%2Fx86-64%2Fstable%2F.exe+download)  
-- **Docker** — [Get Started](https://www.docker.com/get-started/)  
-- **kubectl** — [Install Guide](https://kubernetes.io/docs/tasks/tools/)
+- **Minikube** - [Install Guide](https://minikube.sigs.k8s.io/docs/start/?arch=%2Fwindows%2Fx86-64%2Fstable%2F.exe+download)  
+- **Docker** - [Get Started](https://www.docker.com/get-started/)  
+- **kubectl** - [Install Guide](https://kubernetes.io/docs/tasks/tools/)
 
 ---
 
