@@ -1,0 +1,59 @@
+# =========================
+# OPA SERVICE
+# =========================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-svc-config
+  namespace: swizz
+data:
+  OPA_URL: "http://opa:8181/v1/data/http/authz/allow"
+  LOG_FORMAT: "TEXT"
+  LOG_LEVEL: "INFO"
+  LOG_FILE_PATH: "../logs/app.log"
+  ENVIRONMENT: "dev"
+  TIMEOUT: "5.0"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa-service
+  namespace: swizz
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opa-service
+  template:
+    metadata:
+      labels:
+        app: opa-service
+    spec:
+      containers:
+        - name: opa-service
+          image: docker.io/devmohaned/opa-service:0.1.3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+          envFrom:
+            - configMapRef:
+                name: opa-svc-config
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa-service
+  namespace: swizz
+spec:
+  selector:
+    app: opa-service
+  ports:
+    - port: 8001
+      targetPort: 8001
+  type: ClusterIP

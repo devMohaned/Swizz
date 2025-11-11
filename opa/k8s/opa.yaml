@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-policy
+  namespace: swizz
+data:
+  policy.rego: |
+    package http.authz
+    default allow := false
+
+    # Admins can GET and POST /api/users
+    allow if {
+      input.role == "admin"
+      input.method in {"GET","POST"}
+      input.path in {"/api/users","/api/users/"}
+    }
+
+    # Authenticated (has sub) can GET /api/users
+    allow if {
+      input.sub != null
+      input.sub != ""
+      input.method == "GET"
+      input.path in {"/api/users","/api/users/"}
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: swizz
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: opa }
+  template:
+    metadata:
+      labels: { app: opa }
+    spec:
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:latest
+          args: ["run","--server","--addr=0.0.0.0:8181","/etc/opa/policy.rego"]
+          ports:
+            - containerPort: 8181
+          volumeMounts:
+            - name: policy
+              mountPath: /etc/opa/policy.rego   # mount just the file
+              subPath: policy.rego
+              readOnly: true
+      volumes:
+        - name: policy
+          configMap:
+            name: opa-policy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+  namespace: swizz
+spec:
+  selector:
+    app: opa
+  ports:
+    - port: 8181
+      targetPort: 8181
+  type: ClusterIP

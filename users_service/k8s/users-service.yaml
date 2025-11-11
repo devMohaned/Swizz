@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: swizz
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: users-config
+  namespace: swizz
+data:
+  APP_NAME: "Swiss"
+  ENVIRONMENT: "dev"
+  LOG_FORMAT: "TEXT"
+  LOG_LEVEL: "INFO"
+  LOG_FILE_PATH: "../logs/app.log"
+  DEBUG: "False"
+
+  DATABASE_HOST: "postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "appdb"
+
+  JWT_ALGORITHM: "HS256"
+  JWT_AUDIENCE: "users-api"
+  JWT_ISSUER: "auth-service"
+
+  OPA_SERVICE_URL: "http://opa-service:8001/api/internal/evaluate"
+  TIMEOUT: "5.0"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users-service
+  namespace: swizz
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: users-service
+  template:
+    metadata:
+      labels:
+        app: users-service
+    spec:
+      containers:
+        - name: users-service
+          # Use an image your cluster can pull:
+          # - If Minikube: build inside Minikube and use users-service:0.1.3
+          # - Or push to your Docker Hub and reference that
+          image: docker.io/devmohaned/users-service:0.1.3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: users-config
+            - secretRef:
+                name: app-secrets
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: users-service
+  namespace: swizz
+spec:
+  selector:
+    app: users-service
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP

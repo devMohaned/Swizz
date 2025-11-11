@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppass
+      POSTGRES_DB: appdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  opa:
+    image: openpolicyagent/opa:latest
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policy"]
+    volumes:
+      - ./opa/policy:/policy:ro
+    ports:
+      - "8181:8181"
+
+  opa-service:
+    build:
+      context: ./opa_service
+    image: opa-service:0.1.0
+    environment:
+      # talks to the OPA engine by service name
+      OPA_URL: http://opa:8181/v1/data/http/authz/allow
+      LOG_FORMAT: TEXT
+      LOG_LEVEL: INFO
+      LOG_FILE_PATH: "../logs/app.log"
+      ENVIRONMENT: dev
+      TIMEOUT: "5.0"
+    ports:
+      - "8001:8001"
+    depends_on:
+      - opa
+
+  users-service:
+    build:
+      context: ./users_service
+    image: users-service:0.1.0
+    environment:
+      # DB connection (use service name, not localhost)
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USER: appuser
+      DATABASE_PASSWORD: apppass
+      DATABASE_NAME: appdb
+
+      # Auth
+      JWT_SECRET: supersecret
+      JWT_ALGORITHM: HS256
+      JWT_AUDIENCE: users-api
+      JWT_ISSUER: auth-service
+
+      # Integration: wrapper path (adjust if your route differs)
+      OPA_SERVICE_URL: http://opa-service:8001/api/internal/evaluate
+      TIMEOUT: "5.0"
+
+      # App/Logging
+      APP_NAME: Swiss
+      ENVIRONMENT: dev
+      LOG_FORMAT: TEXT
+      LOG_LEVEL: INFO
+      LOG_FILE_PATH: "../logs/app.log"
+      DEBUG: "False"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - opa-service
+
+volumes:
+  pgdata:
